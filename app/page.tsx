@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useEffect, useState, useRef, memo, useCallback } from 'react';
@@ -401,7 +400,6 @@ function RemoteDashboard({ cliente, onLogout }: { cliente: Cliente, onLogout: ()
       return;
     }
 
-    // FIX DEFINITIVO PARA ERRORES FANTASMAS: Solo saltará si tiene la propiedad .message explícitamente
     const { error: errorHist } = await supabase.from('historial_canciones').insert([{
       cliente_id: cliente.id, youtube_url: url, titulo: tituloReal, cantante: cantante
     }]);
@@ -453,7 +451,6 @@ function RemoteDashboard({ cliente, onLogout }: { cliente: Cliente, onLogout: ()
         </button>
       </form>
 
-      {}
       <div className="bg-gray-800 p-5 rounded-2xl shadow-[0_0_20px_rgba(0,0,0,0.5)] border border-gray-700 flex flex-col h-[400px]">
         <h2 className="text-xl font-bold mb-4 text-white flex items-center justify-between">
           Historial Inteligente
@@ -498,6 +495,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [dias, setDias] = useState(1);
   const [tarifa, setTarifa] = useState(10);
   
+  const [nuevoAdminPassword, setNuevoAdminPassword] = useState('');
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [editDatos, setEditDatos] = useState<Partial<Cliente>>({});
   
@@ -507,6 +505,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   useEffect(() => { cargarClientes(); }, []);
 
   const cargarClientes = async () => {
+    // Excluimos al usuario 'admin' de la lista de clientes visibles
     const { data } = await supabase.from('usuarios').select('*').neq('usuario', 'admin').order('fecha_activacion', { ascending: false });
     if (data) setClientes(data as Cliente[]);
   };
@@ -519,6 +518,31 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     setToast({ message: "¡Cliente Registrado con éxito!", type: 'success' });
     setNuevoUsuario(''); setNuevoPassword(''); setDias(1);
     cargarClientes();
+  };
+
+  const actualizarPasswordMaestra = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nuevoAdminPassword) return;
+
+    // Buscamos si el usuario admin ya existe en la base de datos
+    const { data } = await supabase.from('usuarios').select('id').eq('usuario', 'admin').limit(1);
+
+    if (data && data.length > 0) {
+      // Si existe, lo actualizamos
+      await supabase.from('usuarios').update({ password: nuevoAdminPassword }).eq('id', data[0].id);
+    } else {
+      // Si no existe, lo creamos para que el sistema lo empiece a leer
+      await supabase.from('usuarios').insert([{
+        usuario: 'admin',
+        password: nuevoAdminPassword,
+        dias_asignados: 9999,
+        tarifa_diaria: 0,
+        fecha_activacion: new Date().toISOString()
+      }]);
+    }
+
+    setToast({ message: "¡Contraseña de Administrador actualizada exitosamente!", type: 'success' });
+    setNuevoAdminPassword('');
   };
 
   const iniciarEdicion = (c: Cliente) => {
@@ -559,14 +583,14 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     <div className="min-h-screen bg-gray-950 text-white p-8 relative">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
-      {/* Modal Personalizado en lugar de window.confirm nativo */}
+      {/* Modal Personalizado */}
       {confirmModal.isOpen && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[50000] p-4">
           <div className="bg-gray-900 border border-gray-700 p-8 rounded-2xl max-w-md w-full shadow-[0_0_40px_rgba(220,38,38,0.3)] animate-in zoom-in-95">
             <h3 className="text-2xl font-black text-red-500 mb-4">¿Eliminar Usuario?</h3>
             <p className="text-gray-300 mb-8 leading-relaxed">
               Estás a punto de borrar permanentemente a <span className="font-bold text-white">"{confirmModal.userName}"</span>. 
-              Esto destruirá su sala de TV y borrará todo el historial de canciones asociado. Esta acción no se puede deshacer.
+              Esto destruirá su sala de TV y borrará todo el historial asociado. Esta acción no se puede deshacer.
             </p>
             <div className="flex gap-4">
               <button onClick={() => setConfirmModal({ isOpen: false, idToDelete: null, userName: '' })} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 rounded-xl transition-colors">
@@ -580,7 +604,6 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         </div>
       )}
 
-      {}
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-10 border-b border-gray-800 pb-4">
           <h1 className="text-4xl font-black tracking-widest text-purple-500 drop-shadow-[0_0_15px_rgba(147,51,234,0.4)]">KARAOKE ADMIN</h1>
@@ -588,40 +611,64 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          <div className="bg-gray-900 p-6 rounded-2xl border border-gray-800 h-fit shadow-2xl">
-            <h2 className="text-2xl font-bold mb-6 text-white border-b border-gray-800 pb-3">Nueva Suscripción</h2>
-            <form onSubmit={registrarCliente} className="space-y-5">
-              <div>
-                <label className="text-sm font-bold text-gray-400">Usuario (PIN de Acceso)</label>
-                <input required value={nuevoUsuario} onChange={e=>setNuevoUsuario(e.target.value)} className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 mt-1 text-white focus:border-purple-500 outline-none transition-colors" />
-              </div>
-              <div>
-                <label className="text-sm font-bold text-gray-400">Contraseña Administrador</label>
-                <input required value={nuevoPassword} onChange={e=>setNuevoPassword(e.target.value)} className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 mt-1 text-white focus:border-purple-500 outline-none transition-colors" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+          
+          {/* Columna Izquierda: Controles */}
+          <div className="space-y-6">
+            
+            {/* Tarjeta de Nueva Suscripción */}
+            <div className="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-2xl">
+              <h2 className="text-2xl font-bold mb-6 text-white border-b border-gray-800 pb-3">Nueva Suscripción</h2>
+              <form onSubmit={registrarCliente} className="space-y-5">
                 <div>
-                  <label className="text-sm font-bold text-gray-400">Días Contratados</label>
-                  <input type="number" required min="1" value={dias} onChange={e=>setDias(Number(e.target.value))} className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 mt-1 text-white focus:border-purple-500 outline-none transition-colors" />
+                  <label className="text-sm font-bold text-gray-400">Usuario (PIN de Acceso)</label>
+                  <input required value={nuevoUsuario} onChange={e=>setNuevoUsuario(e.target.value)} className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 mt-1 text-white focus:border-purple-500 outline-none transition-colors" />
                 </div>
                 <div>
-                  <label className="text-sm font-bold text-gray-400">Tarifa / Día ($)</label>
-                  <input type="number" required min="1" value={tarifa} onChange={e=>setTarifa(Number(e.target.value))} className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 mt-1 text-white focus:border-purple-500 outline-none transition-colors" />
+                  <label className="text-sm font-bold text-gray-400">Contraseña Administrador</label>
+                  <input required value={nuevoPassword} onChange={e=>setNuevoPassword(e.target.value)} className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 mt-1 text-white focus:border-purple-500 outline-none transition-colors" />
                 </div>
-              </div>
-              <div className="pt-6 border-t border-gray-800 mt-2">
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-gray-400 font-bold">Monto Total Estimado:</span>
-                  <span className="text-green-400 font-black text-2xl">${(dias * tarifa).toFixed(2)}</span>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-bold text-gray-400">Días Contratados</label>
+                    <input type="number" required min="1" value={dias} onChange={e=>setDias(Number(e.target.value))} className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 mt-1 text-white focus:border-purple-500 outline-none transition-colors" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-bold text-gray-400">Tarifa / Día ($)</label>
+                    <input type="number" required min="1" value={tarifa} onChange={e=>setTarifa(Number(e.target.value))} className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 mt-1 text-white focus:border-purple-500 outline-none transition-colors" />
+                  </div>
                 </div>
-                <button type="submit" className="w-full bg-purple-600 font-black tracking-wider py-4 rounded-xl hover:bg-purple-500 shadow-[0_0_15px_rgba(147,51,234,0.4)] transition-transform hover:scale-105 active:scale-95">
-                  REGISTRAR CLIENTE
+                <div className="pt-6 border-t border-gray-800 mt-2">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-gray-400 font-bold">Monto Total Estimado:</span>
+                    <span className="text-green-400 font-black text-2xl">${(dias * tarifa).toFixed(2)}</span>
+                  </div>
+                  <button type="submit" className="w-full bg-purple-600 font-black tracking-wider py-4 rounded-xl hover:bg-purple-500 shadow-[0_0_15px_rgba(147,51,234,0.4)] transition-transform hover:scale-105 active:scale-95">
+                    REGISTRAR CLIENTE
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Nueva Tarjeta: Seguridad del Sistema */}
+            <div className="bg-gray-900 p-6 rounded-2xl border border-red-900/50 shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 bg-red-900/40 px-4 py-1 rounded-bl-xl text-xs font-bold text-red-400">NUEVO</div>
+              <h2 className="text-xl font-bold mb-4 text-white border-b border-gray-800 pb-3 flex items-center gap-2">
+                🔒 Seguridad del Sistema
+              </h2>
+              <form onSubmit={actualizarPasswordMaestra} className="space-y-4">
+                <div>
+                  <label className="text-sm font-bold text-gray-400">Actualizar Clave Maestra ('admin')</label>
+                  <input type="password" required placeholder="Escribe tu nueva clave maestra..." value={nuevoAdminPassword} onChange={e=>setNuevoAdminPassword(e.target.value)} className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 mt-2 text-white focus:border-red-500 outline-none transition-colors" />
+                </div>
+                <button type="submit" className="w-full bg-red-900/50 hover:bg-red-600 border border-red-800 font-bold tracking-wider py-3 rounded-xl transition-all">
+                  Cambiar Contraseña
                 </button>
-              </div>
-            </form>
+              </form>
+            </div>
+
           </div>
 
-          {}
+          {/* Columna Derecha: Tabla de Sesiones */}
           <div className="xl:col-span-2 bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-2xl">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 border-b border-gray-800 pb-4">
               <h2 className="text-2xl font-bold text-white">Salas y Sesiones Activas</h2>
@@ -739,14 +786,29 @@ export default function AppRouter() {
 
   const handleLogin = async (e: React.FormEvent, targetView: 'tv' | 'remote' | 'admin') => {
     e.preventDefault();
-    if (usuario === 'admin' && password === 'admin123' && targetView === 'admin') {
-      setView('admin');
-      return;
-    }
 
+    // Consultamos la Base de Datos para cualquier usuario que intente ingresar
     const { data, error } = await supabase.from('usuarios').select('*').eq('usuario', usuario).eq('password', password).limit(1);
     const clienteEncontrado = data && data.length > 0 ? data[0] : null;
 
+    // LÓGICA DE SEGURIDAD EXCLUSIVA PARA EL ADMINISTRADOR
+    if (targetView === 'admin') {
+      if (clienteEncontrado && clienteEncontrado.usuario === 'admin') {
+         // Existe en base de datos y la clave es correcta
+         setView('admin');
+         return;
+      } else if (usuario === 'admin' && password === 'admin123') {
+         // Fallback de Emergencia: La base de datos no tiene al admin, pero se usa la clave default de emergencia
+         setView('admin');
+         return;
+      } else {
+         // Intentó entrar como admin pero falló todo
+         setToast({ message: 'Credenciales de administrador incorrectas.', type: 'error' });
+         return;
+      }
+    }
+
+    // LÓGICA NORMAL PARA CLIENTES DE TV Y DJ
     if (error || !clienteEncontrado) {
       setToast({ message: 'Credenciales incorrectas o usuario inexistente.', type: 'error' });
       return;
@@ -836,4 +898,3 @@ export default function AppRouter() {
     </div>
   );
 }
-
